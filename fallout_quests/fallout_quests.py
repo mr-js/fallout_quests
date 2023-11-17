@@ -15,12 +15,13 @@ import base64
 import importlib
 import tomllib
 import logging
+from tqdm import tqdm
 
 
 DEBUG = False
 logging_level = logging.DEBUG if DEBUG else logging.INFO
-logging.basicConfig(handlers=[logging.StreamHandler(), logging.FileHandler('fallout_quests.log', 'w', 'utf-8')], format='%(asctime)s %(levelname)s %(message)s [%(funcName)s]', datefmt='%Y.%m.%d %H:%M:%S', level=logging_level)
-# logging.basicConfig(handlers=[logging.FileHandler('fallout_quests.log', 'w', 'utf-8')], format='%(asctime)s %(levelname)s %(message)s [%(funcName)s]', datefmt='%Y.%m.%d %H:%M:%S', level=logging_level)
+# logging.basicConfig(handlers=[logging.StreamHandler(), logging.FileHandler('fallout_quests.log', 'w', 'utf-8')], format='%(asctime)s %(levelname)s %(message)s [%(funcName)s]', datefmt='%Y.%m.%d %H:%M:%S', level=logging_level)
+logging.basicConfig(handlers=[logging.FileHandler('fallout_quests.log', 'w', 'utf-8')], format='%(asctime)s %(levelname)s %(message)s [%(funcName)s]', datefmt='%Y.%m.%d %H:%M:%S', level=logging_level)
 
 
 def filename_check(filename): return ''.join(list(map(lambda x: '' if x in r'\/:*?"<>|' or x == '\n' else x, filename)))[:128]
@@ -275,12 +276,12 @@ def index_create(main_filter, print_filters):
 
 
 def run(step_download=True, step_parse=True, step_build=True, name_filter=''):
-    logging.info(f'STARTED')
+    logging.info(f'PROGRAM STARTED')
     root_path = os.getcwd()
     configfiles = [file for file in os.listdir('settings') if file.endswith('.py') and not file.startswith('!')]
     for configfile in configfiles:
         project = os.path.splitext(os.path.basename(configfile))[0]
-        logging.info(f'PROJECT {project}')
+        logging.info(f'PROJECT {project} STARTED')
         try:
             settings = importlib.import_module(f'settings.{project}')
             project_path = os.path.join(root_path, project)
@@ -292,23 +293,29 @@ def run(step_download=True, step_parse=True, step_build=True, name_filter=''):
         except Exception as e:
             logging.critical(f'Cannot starts this project ({e})')
         if step_download:
+            logging.info(f'DOWNLOAD STARTED')
             filename = download(settings.protocol, settings.domain, settings.root_path, settings.root_page)
             page, meta, title, summary, content, links  = extract(filename, settings.page_block, settings.meta_block, settings.title_block, settings.summary_block, settings.root_page_links_block, settings.cut_blocks, settings.links_required, settings.links_removed, settings.links_negatives, settings.links_positives, settings.links_patches)
             all_links = links
             for level in range(1, settings.pages_level_max+1):
-                logging.info(f'LEVEL: {level}')
-                for link in sorted(all_links):
+                logging.info(f'DOWNLOAD LEVEL: {level}')
+                for link in tqdm(sorted(all_links), desc=f'DOWNLOAD LEVEL {level}'):
                     filename = download(settings.protocol, settings.domain, settings.root_path, link)
                     page, meta, title, summary, content, links  = extract(filename, settings.page_block, settings.meta_block, settings.title_block, settings.summary_block, settings.content_block, settings.cut_blocks, settings.links_required, settings.links_removed, settings.links_negatives, settings.links_positives, settings.links_patches)
                     if links is not None:
                         all_links.update(links)
+            logging.info(f'DOWNLOAD COMPLETED')
         if step_parse:
-            for file in os.listdir('raw'):
+            logging.info(f'PARSING STARTED')
+            for file in tqdm(os.listdir('raw'), desc=f'PARSE RAW'):
                 if len(name_filter) > 0 and filename_check(name_filter.replace(' ', '_')) not in file:
                     continue
                 filename = os.path.join('raw', file)
                 title = os.path.splitext(os.path.basename(filename))[0]
                 filename_out = os.path.join('html', f'{filename_check(title)}.html')
+                if os.path.isfile(filename_out):
+                    logging.warning(f'{filename} alreadedy parsed => passed')
+                    continue
                 page, meta, title, summary, content, links  = extract(filename, settings.page_block, settings.meta_block, settings.title_block, settings.summary_block, settings.content_block, settings.cut_blocks, settings.links_required, settings.links_removed, settings.links_negatives, settings.links_positives, settings.links_patches)
                 if page is None:
                     logging.warning(f'{filename} does not match page => passed')
@@ -346,7 +353,9 @@ def run(step_download=True, step_parse=True, step_build=True, name_filter=''):
                 with codecs.open(filename_out, 'w', 'utf-8') as f:
                     f.write(html)
                 logging.info(f'{filename} => {filename_out}')
+            logging.info(f'PARSING COMPLETED')
         if step_build:
+            logging.info(f'BUILDING STARTED')
             title = f'Краткий справочник {project}'.replace('_', ' ')
             content = ''
             content += f'<h2>Обзор</h2>\n'
@@ -362,7 +371,9 @@ def run(step_download=True, step_parse=True, step_build=True, name_filter=''):
             with codecs.open(filename, 'w', 'utf-8') as f:
                 f.write(html)
             logging.info(f'"{title}" => {filename}')
-    logging.info(f'FINISHED')
+            logging.info(f'BUILDING COMPLETED')
+        logging.info(f'PROJECT {project} COMPLETED')
+    logging.info(f'PROGRAM COMPLETED')
 
 
 if __name__ == "__main__":
