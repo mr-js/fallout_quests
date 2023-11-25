@@ -1,5 +1,16 @@
-[common]
-step_download = true
-step_parse = true
-step_build = true
+[debug]
+debug = false
+console = false
+
+[download]
+enabled = false
+overwrite = false
+
+[parse]
+enabled = true
+overwrite = true
 name_filter = ''
+
+[build]
+enabled = true
+overwrite = true

@@ -18,14 +18,38 @@ import logging
 from tqdm import tqdm
 
 
-DEBUG = False
-logging_level = logging.DEBUG if DEBUG else logging.INFO
-# logging.basicConfig(handlers=[logging.StreamHandler(), logging.FileHandler('fallout_quests.log', 'w', 'utf-8')], format='%(asctime)s %(levelname)s %(message)s [%(funcName)s]', datefmt='%Y.%m.%d %H:%M:%S', level=logging_level)
-logging.basicConfig(handlers=[logging.FileHandler('fallout_quests.log', 'w', 'utf-8')], format='%(asctime)s %(levelname)s %(message)s [%(funcName)s]', datefmt='%Y.%m.%d %H:%M:%S', level=logging_level)
+with open(os.path.join('settings', 'global.toml'), 'rb') as f:
+    config = tomllib.load(f)
+debug = config['debug']['debug']
+logging_level = logging.DEBUG if debug else logging.INFO
+console = config['debug']['console']
+if console:
+    logging.basicConfig(handlers=[logging.StreamHandler(), logging.FileHandler('fallout_quests.log', 'w', 'utf-8')], format='%(asctime)s %(levelname)s %(message)s [%(funcName)s]', datefmt='%Y.%m.%d %H:%M:%S', level=logging_level)
+else:
+    logging.basicConfig(handlers=[logging.FileHandler('fallout_quests.log', 'w', 'utf-8')], format='%(asctime)s %(levelname)s %(message)s [%(funcName)s]', datefmt='%Y.%m.%d %H:%M:%S', level=logging_level)
 
 
 def filename_check(filename): return ''.join(list(map(lambda x: '' if x in r'\/:*?"<>|' or x == '\n' else x, filename)))[:128]
 def files_list(path, ext='.html'): return list(map(lambda x: str(x) + ext, sorted([int(f.strip(ext)) for f in os.listdir(path) if f.endswith(ext)])))
+
+
+
+def __lxm2str(element):
+    result = ''
+    try:
+        result = unquote(lxml.html.tostring(element, encoding='utf-8', pretty_print=True)).strip()
+    except Exception as e:
+        logging.error(f'!ERROR: __lxm2str {element} not converted: {e})')
+    return result
+
+
+def __str2lxm(element):
+    result = None
+    try:
+        result = lxml.html.fromstring(element)
+    except Exception as e:
+        logging.error(f'!ERROR: __str2lxm {element} not converted: {e})')
+    return result
 
 
 def sample(items, terms_required, terms_removed, terms_negatives, terms_positives, terms_patches):
@@ -53,43 +77,43 @@ def sample(items, terms_required, terms_removed, terms_negatives, terms_positive
     return items_result
 
 
-def download(protocol, domain, base, name, query='', fragment=''):
+def __img2base64(src):
+    img = ''
+    raw = ''
+    type = 'png'
+    try:
+        raw = requests.get(src).content
+         # !DEMO
+        if '.jpg' or '.jpeg' in raw:
+            type = 'jpg'
+        else:
+            type = 'png'
+        img = fr'data:image/{type};base64, ' + base64.b64encode(raw).decode('utf-8')
+    except Exception as e:
+        logging.error(f'!ERROR: image {src} not converted: {e})')
+    return img
+
+
+def download(filename, protocol, domain, base, name, query='', fragment=''):
     path = 'raw'
     os.makedirs(path, exist_ok=True)
-    filename = os.path.join(path, f'{filename_check(name.split(r"/")[-1])}.html')
-    if os.path.isfile(filename):
-        logging.warning(f'{filename} exist => passed')
-        return filename
     url = urlunsplit(SplitResult(protocol, domain, urljoin(base, name), query, fragment))
-    raw = ''
-    status_code = None
+    content = ''
     try:
-        r = requests.get(unquote(url))
-        status_code = r.status_code
-        raw = r.text
+        content = requests.get(url).text
     except Exception as e:
-        logging.error(f'{url} not downloaded ({status_code})')
+        logging.error(f'{url} not downloaded ({e})')
         return None
-    source = lxml.html.fromstring(raw)
-    for link in source.iterlinks():
-        instance, type, value, _ = link
-        if type == 'src':
-            for attrib_name in instance.attrib.iterkeys():
-                if attrib_name != 'src':
-                    instance.attrib.pop(attrib_name, None)
-            embedded_image_data = ''
-            status_code = None
-            try:
-                r = requests.get(unquote(value))
-                status_code = r.status_code
-                data = base64.b64encode(r.content).decode('utf-8')
-                # if PNG?
-                embedded_image_data = fr'data:image/jpeg;base64,{data}'
-            except Exception as e:
-                logging.debug(f'{value} not downloaded ({status_code})')
-                continue
-            instance.set('src', embedded_image_data)
-    html = unquote(lxml.html.tostring(source, encoding='utf-8', pretty_print=True).decode('utf-8').strip())
+    source = __str2lxm(content)
+    for element in source.iter('*'):
+        if element.tag == 'img':
+            if 'data-src' in element.attrib:
+                element.set('src', element.get('data-src'))
+            element.set('src', __img2base64(element.get('src')))
+            for attrib in element.attrib:
+                if attrib != 'src' and attrib != 'alt':
+                    element.attrib.pop(attrib)
+    html = __lxm2str(source)
     with codecs.open(filename, 'w', 'utf-8') as f:
         f.write(html)
     logging.info(f'{url} => {filename}')
@@ -102,7 +126,7 @@ def extract(filename, page_block, meta_block, title_block, summary_block, conten
     raw = ''
     with codecs.open(filename, 'r', 'utf-8') as f:
         raw = f.read()
-    source = lxml.html.fromstring(raw)
+    source = __str2lxm(raw)
     page = data_extract(source, page_block)
     if page is None:
         logging.debug(f'{filename} is None')
@@ -161,97 +185,66 @@ def attribute_extract(source, block):
     logging.debug(f'{source} by {block} exctracted:\n{attrib}\n')
     return attrib
 
+
 def text_extract(element):
-    content_filter = lxml.html.clean.Cleaner(scripts=True, javascript=True, comments=True, style=True, inline_style=True, links=True, meta=True, page_structure=True, processing_instructions=True, embedded=True, frames=True, forms=True, annoying_tags=[], remove_tags=[], kill_tags=[], allow_tags=['a'], remove_unknown_tags=False, safe_attrs_only=True, safe_attrs=['href', 'id'], add_nofollow=False, host_whitelist=[], whitelist_tags=[])
+    content_filter = lxml.html.clean.Cleaner(scripts=True, javascript=True, comments=True, style=True, inline_style=True, links=True, meta=True, page_structure=True, processing_instructions=True, embedded=True, frames=True, forms=True, annoying_tags=[], remove_tags=[], kill_tags=[], allow_tags=['a', 'img'], remove_unknown_tags=False, safe_attrs_only=True, safe_attrs=['href', 'src', 'id'], add_nofollow=False, host_whitelist=[], whitelist_tags=[])
     text = ''
     media = ''
-    try:
-        for subitem in element.iter():
-            if subitem.tag == 'img':
-                media += '<p>' + unquote(lxml.etree.tostring(subitem, encoding='utf-8', pretty_print=True).decode('utf-8')) + '</p>'
-        raw = unquote(lxml.etree.tostring(element, encoding='utf-8', pretty_print=True).decode('utf-8'))
-        text = content_filter.clean_html(raw)
-        text = ' '.join(item.strip() for item in list(filter(None, text.split('\n')))).strip()
-        text = text.replace('[ ]', '').replace('[]', '')
-        if text.startswith('<div>') and text.endswith('</div>'):
-            text = text[5:-6]
-    except Exception as e:
-        logging.debug(f'{element} text not extracted ({e})')
-        return ''
+    # try:
+    # for subitem in element.iter():
+    #     if subitem.tag == 'img':
+    #         media += '<p>' + unquote(lxml.etree.tostring(subitem, encoding='utf-8', pretty_print=True).decode('utf-8')) + '</p>'
+    src = __lxm2str(element)
+    text = content_filter.clean_html(src).strip()
+    text = ' '.join(item.strip() for item in list(filter(None, text.split('\n')))).strip()
+    text = text.replace('[ ]', '').replace('[]', '')
+    text = text[5:-6]
+    # except Exception as e:
+    #     logging.debug(f'{element} text not extracted ({e})')
+    #     return ''
     logging.debug(f'{element} text exctracted:\n{text}\n')
     return f'{media}\n{text}'
 
-def expand(content):
-    expaned_tags = ['div', 'section', 'span']
-    check_inline_blocks = lambda item: len(set(filter(lambda subitem: subitem.tag in expaned_tags, item.getiterator())))
-    for item in content.getchildren():
-        tag = item.tag
-        if tag in expaned_tags:
-            if check_inline_blocks(content) > 0:
-                index = content.index(item)
-                index_delta = 1
-                for subitem in item:
-                    content.insert(index+index_delta, subitem)
-                    index_delta += 1
-            item.getparent().remove(item)
-    return content
+# def expand(content):
+#     expaned_tags = ['div', 'section', 'span']
+#     check_inline_blocks = lambda item: len(set(filter(lambda subitem: subitem.tag in expaned_tags, item.getiterator())))
+#     for item in content.getchildren():
+#         tag = item.tag
+#         if tag in expaned_tags:
+#             if check_inline_blocks(content) > 0:
+#                 index = content.index(item)
+#                 index_delta = 1
+#                 for subitem in item:
+#                     content.insert(index+index_delta, subitem)
+#                     index_delta += 1
+#             item.getparent().remove(item)
+#     return content
+
 
 
 def transform(title, content):
     result = ''
-    item_counter = 0
-    content = expand(content)
-    for item in content.getchildren():
-        text = ''
-        tag = item.tag
-        item_counter += 1
-        # logging.debug(f'{80*"="}\n#{item_counter}: {tag}\n{80*"-"}{lxml.html.tostring(item, encoding="utf-8").decode("utf-8").strip()}\n')
-        if tag in ['h1', 'h2', 'h3', 'h4', 'h5']:
-            text = text_extract(item)
-            result += f'<{tag}>{text}</{tag}>\n'
-        elif tag == 'p':
-            text = text_extract(item)
-            result += f'<p>{text}</p>\n'
-        elif tag == 'ul' or tag == 'ol':
-            result += '<ul>\n'
-            if len(item.getchildren()):
-                for subitem in item:
-                    if subitem.tag == 'li':
-                        text = text_extract(subitem)
-                        result += f'<li>{text}</li>\n'
-                result += '</ul>\n'
-        elif tag == 'table':
-            result += '<table>\n'
-            if len(item.getchildren()):
-                tbody = item.getchildren()[0]
-                if tbody.tag == 'tbody':
-                    result += '<tbody>\n'
-                    for tr in tbody:
-                        if tr.tag == 'tr':
-                            result += '<tr>\n'
-                            for th in tr:
-                                if th.tag == 'th':
-                                    result += '<th>\n'
-                                    text = text_extract(th)
-                                    result += text
-                                    result += '</th>\n'
-                            for td in tr:
-                                if td.tag == 'td':
-                                    result += '<td>\n'
-                                    text = text_extract(td)
-                                    result += text
-                                    result += '</td>\n'
-                            result += '</tr>\n'
-                    result += '</tbody>\n'
-            result += '</table>\n'
-        else:
-            ...
-    result = result.replace('[]', '')
+    for item in content.xpath('//p[@title]'):
+        item.tag = 'a'
+        item.set('href', item.get("title", '!!!'))    
+    element_counter = 0
+    # span, div, section, ect => p
+    # content = expand(content)
+    # content = __lxm2str(__str2lxm(content))
+    # safe_attrs=['src', 'href']
+    # allow_tags=['h1', 'h2', 'h3', 'h4', 'h5', 'table', 'tbody', 'tr', 'th', 'td', 'img', 'a', 'p', 'ul', 'ol', 'li']
+    # allow_tags=['a']
+
+    content_filter = lxml.html.clean.Cleaner()
+    content = __str2lxm(content_filter.clean_html(__lxm2str(content))[5:-6])
+
+
+    result = __lxm2str(content)
     title = text_extract(title)
     head = f'<head>\n<meta http-equiv="content-type" content="text/result; charset=utf-8" />\n<title>{title}</title>\n<link rel="stylesheet" href="../style.css">\n</head>\n'
     body = f'<body>\n{result}\n</body>'
     result = f'{head}\n{body}\n'
-    result = unquote(lxml.html.tostring(lxml.html.fromstring(result), encoding='utf-8', pretty_print=True).decode('utf-8').strip())
+    # result = __lxm2str(__str2lxm(result))
     logging.debug(f'title:{title}\n{result[:2048]}\n')
     return result
 
@@ -275,7 +268,7 @@ def index_create(main_filter, print_filters):
     return links_list
 
 
-def run(step_download=True, step_parse=True, step_build=True, name_filter=''):
+def run():
     logging.info(f'PROGRAM STARTED')
     root_path = os.getcwd()
     configfiles = [file for file in os.listdir('settings') if file.endswith('.py') and not file.startswith('!')]
@@ -292,28 +285,36 @@ def run(step_download=True, step_parse=True, step_build=True, name_filter=''):
             os.makedirs('html', exist_ok=True)
         except Exception as e:
             logging.critical(f'Cannot starts this project ({e})')
-        if step_download:
+        if config['download']['enabled']:
             logging.info(f'DOWNLOAD STARTED')
-            filename = download(settings.protocol, settings.domain, settings.root_path, settings.root_page)
+            filename = os.path.join(project_path, 'raw', f'{filename_check(settings.root_page.split(r"/")[-1])}.html')
+            if not config['download']['overwrite'] and os.path.isfile(filename):
+                logging.warning(f'{filename} exist => passed')
+            else:
+                download(filename, settings.protocol, settings.domain, settings.root_path, settings.root_page)
             page, meta, title, summary, content, links  = extract(filename, settings.page_block, settings.meta_block, settings.title_block, settings.summary_block, settings.root_page_links_block, settings.cut_blocks, settings.links_required, settings.links_removed, settings.links_negatives, settings.links_positives, settings.links_patches)
             all_links = links
             for level in range(1, settings.pages_level_max+1):
                 logging.info(f'DOWNLOAD LEVEL: {level}')
                 for link in tqdm(sorted(all_links), desc=f'DOWNLOAD LEVEL {level}'):
-                    filename = download(settings.protocol, settings.domain, settings.root_path, link)
+                    filename = os.path.join(project_path, 'raw', f'{filename_check(link.split(r"/")[-1])}.html')
+                    download(filename, settings.protocol, settings.domain, settings.root_path, link)
                     page, meta, title, summary, content, links  = extract(filename, settings.page_block, settings.meta_block, settings.title_block, settings.summary_block, settings.content_block, settings.cut_blocks, settings.links_required, settings.links_removed, settings.links_negatives, settings.links_positives, settings.links_patches)
                     if links is not None:
                         all_links.update(links)
             logging.info(f'DOWNLOAD COMPLETED')
-        if step_parse:
+        else:
+            logging.info(f'DOWNLOAD PASSED')
+        if config['parse']['enabled']:
             logging.info(f'PARSING STARTED')
+            name_filter = config['parse']['name_filter']
             for file in tqdm(os.listdir('raw'), desc=f'PARSE RAW'):
                 if len(name_filter) > 0 and filename_check(name_filter.replace(' ', '_')) not in file:
                     continue
                 filename = os.path.join('raw', file)
                 title = os.path.splitext(os.path.basename(filename))[0]
                 filename_out = os.path.join('html', f'{filename_check(title)}.html')
-                if os.path.isfile(filename_out):
+                if not config['parse']['overwrite'] and os.path.isfile(filename_out):
                     logging.warning(f'{filename} alreadedy parsed => passed')
                     continue
                 page, meta, title, summary, content, links  = extract(filename, settings.page_block, settings.meta_block, settings.title_block, settings.summary_block, settings.content_block, settings.cut_blocks, settings.links_required, settings.links_removed, settings.links_negatives, settings.links_positives, settings.links_patches)
@@ -354,7 +355,9 @@ def run(step_download=True, step_parse=True, step_build=True, name_filter=''):
                     f.write(html)
                 logging.info(f'{filename} => {filename_out}')
             logging.info(f'PARSING COMPLETED')
-        if step_build:
+        else:
+            logging.info(f'PARSING PASSED')
+        if config['build']['enabled']:
             logging.info(f'BUILDING STARTED')
             title = f'Краткий справочник {project}'.replace('_', ' ')
             content = ''
@@ -372,15 +375,11 @@ def run(step_download=True, step_parse=True, step_build=True, name_filter=''):
                 f.write(html)
             logging.info(f'"{title}" => {filename}')
             logging.info(f'BUILDING COMPLETED')
+        else:
+            logging.info(f'BUILDING PASSED')
         logging.info(f'PROJECT {project} COMPLETED')
     logging.info(f'PROGRAM COMPLETED')
 
 
 if __name__ == "__main__":
-    with open(os.path.join('settings', 'global.toml'), 'rb') as f:
-        config = tomllib.load(f)
-    step_download = config['common']['step_download']
-    step_parse = config['common']['step_parse']
-    step_build = config['common']['step_build']
-    name_filter = config['common']['name_filter']
-    run(step_download, step_parse, step_build, name_filter)
+    run()

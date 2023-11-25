@@ -5,7 +5,7 @@
 name = 'Morrowind'
 domain = 'elderscrolls.fandom.com'
 protocol =  'https'
-pages_level_max = 5
+pages_level_max = 1
 root_path = f'/ru/wiki'
 root_page = 'Portal/The_Elder_Scrolls_III:_Morrowind'
 root_page_links_block = './/div[@id="portal_content"]'
@@ -16,11 +16,15 @@ title_block = './/h1[@class="page-header__title"]'
 content_block = './/div[@class="mw-parser-output"]'
 summary_block = './/*[@class="linkPreviewText"]'
 cut_blocks = '''
-.//table[@class="va-navbox-border va-navbox-right"]
-.//table[@class="va-navbox-border va-navbox-bottom"]
-.//table[@class="mbox dabhide"]
-.//table[@class="intro"]
+//span[@class="mw-editsection"]
+//div[contains(@class, "portal_section")]
 '''
+# cut_blocks = '''
+# .//table[@class="va-navbox-border va-navbox-right"]
+# .//table[@class="va-navbox-border va-navbox-bottom"]
+# .//table[@class="mbox dabhide"]
+# .//table[@class="intro"]
+# '''
 
 links_required = '''
 /ru/wiki
