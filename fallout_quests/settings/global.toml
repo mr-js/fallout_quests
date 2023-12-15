@@ -3,7 +3,7 @@ debug = false
 console = false
 
 [download]
-enabled = false
+enabled = true
 overwrite = false
 
 [parse]

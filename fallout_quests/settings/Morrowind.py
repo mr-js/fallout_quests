@@ -5,7 +5,7 @@
 name = 'Morrowind'
 domain = 'elderscrolls.fandom.com'
 protocol =  'https'
-pages_level_max = 1
+pages_level_max = 3
 root_path = f'/ru/wiki'
 root_page = 'Portal/The_Elder_Scrolls_III:_Morrowind'
 root_page_links_block = './/div[@id="portal_content"]'

@@ -12,10 +12,15 @@ import html
 import webbrowser
 import copy
 import base64
+import sys
 import importlib
-import tomllib
 import logging
 from tqdm import tqdm
+
+if sys.version_info.major == 3 and sys.version_info.minor >= 11:
+    import tomllib
+else:
+    from pip._vendor import tomli as tomllib
 
 
 with open(os.path.join('settings', 'global.toml'), 'rb') as f:
@@ -287,7 +292,7 @@ def run():
             logging.critical(f'Cannot starts this project ({e})')
         if config['download']['enabled']:
             logging.info(f'DOWNLOAD STARTED')
-            filename = os.path.join(project_path, 'raw', f'{filename_check(settings.root_page.split(r"/")[-1])}.html')
+            filename = os.path.join(project_path, 'raw', f'index.html')
             if not config['download']['overwrite'] and os.path.isfile(filename):
                 logging.warning(f'{filename} exist => passed')
             else:
@@ -298,7 +303,10 @@ def run():
                 logging.info(f'DOWNLOAD LEVEL: {level}')
                 for link in tqdm(sorted(all_links), desc=f'DOWNLOAD LEVEL {level}'):
                     filename = os.path.join(project_path, 'raw', f'{filename_check(link.split(r"/")[-1])}.html')
-                    download(filename, settings.protocol, settings.domain, settings.root_path, link)
+                    if not config['download']['overwrite'] and os.path.isfile(filename):
+                        logging.warning(f'{filename} exist => passed')
+                    else:                    
+                        download(filename, settings.protocol, settings.domain, settings.root_path, link)
                     page, meta, title, summary, content, links  = extract(filename, settings.page_block, settings.meta_block, settings.title_block, settings.summary_block, settings.content_block, settings.cut_blocks, settings.links_required, settings.links_removed, settings.links_negatives, settings.links_positives, settings.links_patches)
                     if links is not None:
                         all_links.update(links)
