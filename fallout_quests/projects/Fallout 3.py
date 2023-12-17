@@ -16,6 +16,7 @@ title_block = './/h1[@class="page-header__title"]'
 content_block = './/div[@class="mw-parser-output"]'
 summary_block = './/*[@class="intro-bullets"]'
 cut_blocks = '''
+//span[@class="mw-editsection"]
 .//table[@class="va-navbox-border va-navbox-right"]
 .//table[@class="va-navbox-border va-navbox-bottom"]
 .//table[@class="mbox dabhide"]

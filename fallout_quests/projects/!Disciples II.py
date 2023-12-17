@@ -10,13 +10,14 @@ root_path = f'/ru/wiki'
 root_page = 'Категория:Disciples_II'
 root_page_links_block = './/div[@id="content"]'
 
-page_block = './/main[@class="page__main" and @lang="ru"]'
-meta_block = './/div[@class="page-header__meta"]'
-title_block = './/h1[@class="page-header__title"]'
-content_block = './/div[@class="mw-parser-output"]'
-summary_block = './/*[@class="linkPreviewText"]'
+page_block = '//main[@class="page__main" and @lang="ru"]'
+meta_block = '//div[@class="page-header__meta"]'
+title_block = '//h1[@class="page-header__title"]'
+content_block = '//div[@class="mw-parser-output"]'
+summary_block = ''
 
 cut_blocks = '''
+//span[@class="mw-editsection"]
 //table[@style="height:30px; background:#dddddd;"]
 //table[@class="wikitable"]
 '''

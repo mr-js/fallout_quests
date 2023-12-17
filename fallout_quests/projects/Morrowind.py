@@ -10,11 +10,11 @@ root_path = f'/ru/wiki'
 root_page = 'Portal/The_Elder_Scrolls_III:_Morrowind'
 root_page_links_block = './/div[@id="portal_content"]'
 
-page_block = './/main[@class="page__main" and @lang="ru"]'
-meta_block = './/div[@class="page-header__meta"]'
-title_block = './/h1[@class="page-header__title"]'
-content_block = './/div[@class="mw-parser-output"]'
-summary_block = './/*[@class="linkPreviewText"]'
+page_block = '//main[@class="page__main" and @lang="ru"]'
+meta_block = '//div[@class="page-header__meta"]'
+title_block = '//h1[@class="page-header__title"]'
+content_block = '//div[@class="mw-parser-output"]'
+summary_block = '//*[@class="linkPreviewText"]'
 cut_blocks = '''
 //span[@class="mw-editsection"]
 //div[contains(@class, "portal_section")]
