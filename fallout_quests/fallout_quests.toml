@@ -5,7 +5,7 @@ console = false
 log_str_len = 256
 
 [download]
-enabled = false
+enabled = true
 overwrite = false
 
 [parse]
