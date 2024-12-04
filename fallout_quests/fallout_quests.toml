@@ -9,9 +9,9 @@ enabled = true
 overwrite = false
 
 [parse]
-enabled = true
+enabled = false
 overwrite = true
 
 [build]
-enabled = true
+enabled = false
 overwrite = true
