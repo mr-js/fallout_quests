@@ -5,12 +5,12 @@ console = false
 log_str_len = 256
 
 [download]
-enabled = true
+enabled = false
 overwrite = false
 
 [parse]
 enabled = true
-overwrite = true
+overwrite = false
 
 [build]
 enabled = true
